@@ -1,0 +1,119 @@
+name: DevOps CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint shell scripts and Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './scripts'
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: app/Dockerfile
+
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg BUILD_SHA="${GITHUB_SHA}" \
+            -t devops-intern-final:"${GITHUB_SHA}" \
+            ./app
+
+  test:
+    name: Test NGINX application
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build test image
+        run: |
+          docker build \
+            --build-arg BUILD_SHA="${GITHUB_SHA}" \
+            -t devops-intern-final:test \
+            ./app
+
+      - name: Start container
+        run: |
+          docker run -d --name devops-test -p 8080:8080 \
+            devops-intern-final:test
+
+      - name: Wait for readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8080/healthz; then
+              echo "Application is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs devops-test
+          exit 1
+
+      - name: Run health check
+        run: bash scripts/healthcheck.sh http://localhost:8080/healthz
+
+      - name: Check build information
+        run: |
+          curl --fail --silent http://localhost:8080/build-info
+          curl --fail --silent http://localhost:8080/build-info \
+            | grep -F "${GITHUB_SHA}"
+
+      - name: Clean up
+        if: always()
+        run: docker rm -f devops-test || true
+
+  publish:
+    name: Publish image to GHCR
+    runs-on: ubuntu-latest
+    needs: [lint, build, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Build publish image
+        run: |
+          docker build \
+            --build-arg BUILD_SHA="${GITHUB_SHA}" \
+            -t "${IMAGE_NAME}:${GITHUB_SHA}" \
+            -t "${IMAGE_NAME}:latest" \
+            ./app
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+          -u "${{ github.actor }}" --password-stdin
+
+      - name: Push image tags
+        run: |
+          docker push "${IMAGE_NAME}:${GITHUB_SHA}"
+          docker push "${IMAGE_NAME}:latest"
