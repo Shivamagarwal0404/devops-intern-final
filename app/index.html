@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevOps Intern Final Assessment</title>
+</head>
+<body>
+    <h1>DevOps Assessment Application</h1>
+    <p>Status: Application is running successfully.</p>
+    <p>Deployment: Docker + NGINX</p>
+    <p>Build SHA: <span id="build-sha">local-build</span></p>
+    <script>
+        fetch('/build-info')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('build-sha').textContent = data.build_sha;
+            })
+            .catch(() => {});
+    </script>
+</body>
+</html>
