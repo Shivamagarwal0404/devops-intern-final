@@ -3,7 +3,7 @@ FROM nginx:1.28-alpine
 
 ARG BUILD_SHA=local-build
 
-USER root
+USER 0:0
 
 RUN apk add --no-cache curl=8.17.0-r1 \
     && sed -i 's#pid[[:space:]]*/run/nginx.pid;#pid /tmp/nginx.pid;#' /etc/nginx/nginx.conf \
@@ -17,10 +17,11 @@ COPY index.html /usr/share/nginx/html/index.html
 RUN printf '{"build_sha":"%s"}\n' "$BUILD_SHA" > /usr/share/nginx/html/build.json \
     && chown -R nginx:nginx /usr/share/nginx/html
 
-USER nginx
+USER 101:101
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8080/healthz || exit 1
+    CMD ["cmd-SHELL", "curl -fsS http://127.0.0.1:8080/healthz || exit 1"]
+
 
