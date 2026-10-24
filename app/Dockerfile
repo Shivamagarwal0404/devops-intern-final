@@ -5,7 +5,7 @@ ARG BUILD_SHA=local-build
 
 USER root
 
-RUN apk add --no-cache curl=8014.1-r2 \
+RUN apk add --no-cache curl=8.17.0-r1 \
     && sed -i 's#pid[[:space:]]*/run/nginx.pid;#pid /tmp/nginx.pid;#' /etc/nginx/nginx.conf \
     && sed -i 's/^user[[:space:]]\+nginx;/# user directive removed for non-root operation/' /etc/nginx/nginx.conf \
     && mkdir -p /var/cache/nginx /var/run \
